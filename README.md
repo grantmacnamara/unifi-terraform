@@ -105,6 +105,77 @@ Instead of manual copy-pasting, the git version control connector links the appl
 
 ---
 
+## 🔄 Working Locally with Your Exported Config (GitOps Workflow Engine)
+
+Once the compiler has exported your configurations directly into your GitHub repository, you can manage your entire home lab or corporate network directly using standard Terraform CLI. 
+
+Follow this blueprint step-by-step to sync, modify, apply, and control your configuration:
+
+### 1. Clone Your Infrastructure Repository
+Pull down the generated configuration files (such as `providers.tf`, `variables.tf`, `networks.tf`, etc.) to your local engine workspace:
+```bash
+git clone https://github.com/your-username/your-unifi-terraform.git
+cd your-unifi-terraform
+```
+
+### 2. Configure Local Authentication Secrets
+The generated provider code is structured to avoid storing credentials in cleartext. Set up safe environment variables targeting your local controller prior to initialization:
+```bash
+export UNIFI_USERNAME="admin"
+export UNIFI_PASSWORD="your-local-unifi-password"
+export UNIFI_API_URL="https://192.168.1.1"  # Replace with your local UDM or Cloud Key IP
+
+# If your controller uses a self-signed SSL certificate (default):
+export UNIFI_INSECURE="true"
+```
+
+### 3. Initialize the Terraform Provider
+Prepare your project folder. This downloads the latest official **`paultyng/unifi`** provider binaries:
+```bash
+terraform init
+```
+
+### 4. Run a Dry Run Audit (Optional)
+Check if your code structure matches the live environment state before doing any active writes:
+```bash
+terraform plan
+```
+
+### 5. Edit Your Configurations (Infrastructure-as-Code)
+Suppose you want to update your IoT subnet to enable multicast DNS (mDNS) or scale variable settings. Open the generated `networks.tf` code inside your visual editor and tweak the values:
+
+```hcl
+# networks.tf
+resource "unifi_network" "iot_network" {
+  name          = "IoT Network"
+  purpose       = "corporate"
+  vlan_id       = 10
+  subnet        = "192.168.10.1/24"
+  dhcp_start    = "192.168.10.10"
+  dhcp_stop     = "192.168.10.200"
+  
+  # Change: Enable Multicast DNS for smart speakers and casting devices
+  multicast_dns = true
+}
+```
+
+### 6. Apply Code Changes to UniFi Controller
+Submit the new declarative rules directly. Terraform talks securely to your UDM or Cloud Key controller and runs API pushes behind the scenes:
+```bash
+terraform apply
+```
+*Review the layout plan, type `yes` to confirm, and the configuration change goes completely live instantly.*
+
+### 7. Commit and Version-Control Your Network
+Now that the real physical device is fully synchronized with your layout code, commit your changes back to your GitHub repository to maintain absolute configuration history and safety:
+```bash
+git add networks.tf
+git commit -m "feat: enable multicast DNS on IoT network VLAN"
+git push origin main
+```
+
+---
+
 ## 📐 Generated Terraform Structure
 
 The exporter outputs a fully-compliant set of HCL declaration structures compatible with the modern **`paultyng/unifi`** Terraform provider:

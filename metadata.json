@@ -1,0 +1,6 @@
+{
+  "name": "UniFi to Terraform Converter",
+  "description": "Convert your UniFi controller backup or live REST dump into paultyng/unifi Terraform configuration files automatically.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

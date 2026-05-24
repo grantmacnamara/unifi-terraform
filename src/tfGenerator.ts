@@ -124,7 +124,16 @@ variable "subnet_${resName}" {
     if (!activeNetworkIds.includes(net._id)) return;
 
     const resName = networkNameMap.get(net._id)!;
-    const purpose = net.purpose || "corporate";
+    
+    // Normalize purpose to supported provider list: corporate, guest, wan, vlan-only
+    let purpose = net.purpose || "corporate";
+    if (!["corporate", "guest", "wan", "vlan-only"].includes(purpose)) {
+      if (purpose === "vlan") {
+        purpose = "vlan-only";
+      } else {
+        purpose = "corporate";
+      }
+    }
 
     networksTf += `\nresource "unifi_network" "${resName}" {
   name    = "${net.name}"
@@ -234,14 +243,14 @@ variable "subnet_${resName}" {
 
       portForwardsTf += `
 resource "unifi_port_forward" "${resName}" {
-  name           = "${pf.name}"
-  enabled        = ${enabled}
-  src            = "${src}"
-  dst_port       = "${pf.dst_port || ""}"
-  fwd_port       = "${pf.fwd_port || pf.dst_port || ""}"
-  fwd_ip         = "${pf.fwd || ""}"
-  proto          = "${proto}"
-  pfwd_interface = "${pf.pfwd_interface || "wan"}"
+  name                   = "${pf.name}"
+  enabled                = ${enabled}
+  src_ip                 = "${src}"
+  dst_port               = "${pf.dst_port || ""}"
+  fwd_port               = "${pf.fwd_port || pf.dst_port || ""}"
+  fwd_ip                 = "${pf.fwd || ""}"
+  protocol               = "${proto}"
+  port_forward_interface = "${pf.pfwd_interface || "wan"}"
 }
 `;
     });

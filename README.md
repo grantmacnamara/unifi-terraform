@@ -119,14 +119,30 @@ cd your-unifi-terraform
 ```
 
 ### 2. Configure Local Authentication Secrets
-The generated provider code is structured to avoid storing credentials in cleartext. Set up safe environment variables targeting your local controller prior to initialization:
-```bash
-export UNIFI_USERNAME="admin"
-export UNIFI_PASSWORD="your-local-unifi-password"
-export UNIFI_API_URL="https://192.168.1.1"  # Replace with your local UDM or Cloud Key IP
+The generated provider code is structured to avoid storing credentials in cleartext. You can supply these secrets to Terraform using either of the following standard approaches on your local terminal:
 
-# If your controller uses a self-signed SSL certificate (default):
+#### Approach A: Shell Environment Variables (Recommended)
+Set active variables directly in your CLI shell before running Terraform. The `paultyng/unifi` provider natively detects these:
+```bash
+export UNIFI_USERNAME="your-unifi-username"
+export UNIFI_PASSWORD="your-secure-unifi-password"
+export UNIFI_API_URL="https://192.168.1.254:443" # Use your controller's LAN IP and port
+
+# If your controller uses a self-signed HTTPS certificate (default for local controllers):
 export UNIFI_INSECURE="true"
+```
+
+#### Approach B: Local Secrets Variable File (`terraform.tfvars`)
+Alternatively, create a file named `terraform.tfvars` in your cloned repository root folder. Notice that your `.gitignore` is already configured to automatically block `*.tfvars` files from being accidentally pushed back to GitHub, keeping your passwords safe.
+
+Create the file:
+```hcl
+# terraform.tfvars
+unifi_username       = "your-unifi-username"
+unifi_password       = "your-secure-unifi-password"
+unifi_api_url        = "https://192.168.1.254:443"
+unifi_site           = "default"
+unifi_allow_insecure = true
 ```
 
 ### 3. Initialize the Terraform Provider

@@ -1,4 +1,5 @@
-import { Server, Globe, ArrowRight, Lock, Download, Settings, BookOpen } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Server, Globe, ArrowRight, Lock, Download, Settings, BookOpen, GitBranch, Github, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
 import { MappingOptions, TerraformFiles } from "../types";
 
 interface StatsSidebarProps {
@@ -11,6 +12,7 @@ interface StatsSidebarProps {
   setSelectedFile: (file: keyof TerraformFiles) => void;
   setActiveTab: (tab: "topology" | "editor" | "connection" | "ai") => void;
   downloadAllFiles: () => void;
+  tfFiles: TerraformFiles;
 }
 
 export default function StatsSidebar({
@@ -23,7 +25,79 @@ export default function StatsSidebar({
   setSelectedFile,
   setActiveTab,
   downloadAllFiles,
+  tfFiles,
 }: StatsSidebarProps) {
+  // Persistence for GitHub coordinates in state with local storage defaults
+  const [gitRepo, setGitRepo] = useState(() => localStorage.getItem("ut_git_repo") || "grantmacnamara/unifi-terraform");
+  const [gitBranch, setGitBranch] = useState(() => localStorage.getItem("ut_git_branch") || "main");
+  const [gitToken, setGitToken] = useState(() => localStorage.getItem("ut_git_token") || "");
+  const [commitMsg, setCommitMsg] = useState("feat: sync UniFi vlan & client configurations");
+  
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ success?: boolean; msg?: string; url?: string } | null>(null);
+
+  // Sync state modifications to local storage
+  useEffect(() => {
+    localStorage.setItem("ut_git_repo", gitRepo);
+  }, [gitRepo]);
+
+  useEffect(() => {
+    localStorage.setItem("ut_git_branch", gitBranch);
+  }, [gitBranch]);
+
+  useEffect(() => {
+    localStorage.setItem("ut_git_token", gitToken);
+  }, [gitToken]);
+
+  const handleGitSync = async () => {
+    if (!gitRepo.includes("/")) {
+      setSyncStatus({ success: false, msg: "Repository must be in format 'owner/repo' (e.g. grantmacnamara/unifi-terraform)." });
+      return;
+    }
+    if (!gitToken.trim()) {
+      setSyncStatus({ success: false, msg: "GitHub Personal Access Token is required to authorize the commit." });
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncStatus(null);
+
+    const [owner, repo] = gitRepo.split("/").map(s => s.trim());
+
+    try {
+      const response = await fetch("/api/github/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: gitToken,
+          owner,
+          repo,
+          branch: gitBranch,
+          commitMessage: commitMsg,
+          files: tfFiles
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "GitHub commit sync failed");
+      }
+
+      setSyncStatus({
+        success: true,
+        msg: "Successfully synchronized IaC configurations directly to repository!",
+        url: data.commitUrl
+      });
+    } catch (err: any) {
+      console.error(err);
+      setSyncStatus({
+        success: false,
+        msg: err.message || "Unknown error occurred syncing with GitHub."
+      });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
   // Calculate dynamic percentages for geometric meters
   const netPercent = Math.min(100, Math.round((selectedNetworkCount / (networksCount || 1)) * 100));
   const clientPercent = Math.min(100, Math.round((selectedClientCount / (clientsCount || 1)) * 100));
@@ -181,6 +255,138 @@ export default function StatsSidebar({
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* GitHub Repository Sync Section */}
+      <div className="bg-slate-950/60 rounded border border-slate-800 p-6 flex flex-col gap-4" id="github-sync-card">
+        <h3 className="font-bold text-white text-[10px] uppercase font-mono tracking-widest flex items-center gap-2 pb-2.5 border-b border-slate-900">
+          <Github className="w-4 h-4 text-slate-400" />
+          Git Version Control
+        </h3>
+
+        <div className="flex flex-col gap-3.5" id="github-sync-form">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex justify-between items-center">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 font-mono">Target Repository</label>
+              <span className="text-[9px] text-slate-500 font-mono">owner/repo</span>
+            </div>
+            <input
+              id="inp-github-repo"
+              type="text"
+              placeholder="grantmacnamara/unifi-terraform"
+              value={gitRepo}
+              onChange={(e) => setGitRepo(e.target.value)}
+              className="p-2 bg-slate-900 border border-slate-850 rounded text-xs font-mono text-white focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 font-mono font-medium">Branch</label>
+              <input
+                id="inp-github-branch"
+                type="text"
+                placeholder="main"
+                value={gitBranch}
+                onChange={(e) => setGitBranch(e.target.value)}
+                className="p-2 bg-slate-900 border border-slate-850 rounded text-xs font-mono text-white focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 font-mono font-medium">Authorization</label>
+                <a 
+                  href="https://github.com/settings/tokens/new?scopes=repo&description=UniFi-to-Terraform-Exporter" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-[8px] text-emerald-500 hover:underline font-mono"
+                >
+                  Get Token
+                </a>
+              </div>
+              <input
+                id="inp-github-token"
+                type="password"
+                placeholder="GitHub PAT (ghp_...)"
+                value={gitToken}
+                onChange={(e) => setGitToken(e.target.value)}
+                className="p-2 bg-slate-900 border border-slate-850 rounded text-xs font-mono text-white focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-450 font-mono">Commit Message</label>
+            <input
+              id="inp-github-commit-msg"
+              type="text"
+              placeholder="feat: sync UniFi vlan & client configurations"
+              value={commitMsg}
+              onChange={(e) => setCommitMsg(e.target.value)}
+              className="p-2 bg-slate-900 border border-slate-850 rounded text-xs font-mono text-white focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+          </div>
+
+          {syncStatus && (
+            <div 
+              id="git-sync-status-indicator"
+              className={`p-3 rounded border flex flex-col gap-1 text-[11px] font-mono leading-normal shadow-xs ${
+                syncStatus.success 
+                  ? "bg-emerald-950/25 border-emerald-900/40 text-emerald-400" 
+                  : "bg-rose-950/25 border-rose-900/40 text-rose-400"
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                {syncStatus.success ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-450 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-450 shrink-0 mt-0.5" />
+                )}
+                <div className="min-w-0">
+                  <p className="font-semibold uppercase text-[10px] tracking-wider mb-1">
+                    {syncStatus.success ? "Sync Complete" : "Sync Failed"}
+                  </p>
+                  <p className="text-[10.5px] leading-relaxed text-slate-300">{syncStatus.msg}</p>
+                  
+                  {syncStatus.url && (
+                    <a
+                      id="lnk-commit-link"
+                      href={syncStatus.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-350 font-bold hover:underline py-1 px-2 bg-slate-900/80 border border-slate-800 rounded select-none text-[9.5px]"
+                    >
+                      <Github className="w-3.5 h-3.5" /> View Commit on GitHub ➔
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <button
+            id="btn-github-sync-action"
+            disabled={isSyncing}
+            onClick={handleGitSync}
+            className={`w-full py-2.5 rounded font-bold text-xs font-mono uppercase tracking-wider transition-all duration-200 shadow-sm flex items-center justify-center gap-2 cursor-pointer ${
+              isSyncing 
+                ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
+                : "bg-slate-100 hover:bg-white text-slate-950"
+            }`}
+          >
+            {isSyncing ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-slate-500" />
+                Pushing Commit...
+              </>
+            ) : (
+              <>
+                <GitBranch className="w-4 h-4 text-slate-950" />
+                Backup to Repo
+              </>
+            )}
+          </button>
         </div>
       </div>
 

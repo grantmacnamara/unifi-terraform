@@ -613,6 +613,7 @@ export default function App() {
             setSelectedFile={setSelectedFile}
             setActiveTab={setActiveTab}
             downloadAllFiles={downloadAllFiles}
+            tfFiles={tfFiles}
           />
         </div>
 

@@ -269,6 +269,133 @@ app.post("/api/unifi/portforward", async (req: Request, res: Response): Promise<
   }
 });
 
+// --- GitHub Repository Sync Integration ---
+
+// Zero-dependency HTTPS client for GitHub REST API
+function githubRequest(
+  pathStr: string,
+  method: string,
+  token: string,
+  body?: any
+): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const url = `https://api.github.com${pathStr}`;
+    const parsedUrl = new URL(url);
+    const options: https.RequestOptions = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: method,
+      headers: {
+        "User-Agent": "unifi-terraform-exporter",
+        "Accept": "application/vnd.github+json",
+        "Authorization": `token ${token.trim()}`,
+        "Content-Type": "application/json"
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let responseData = "";
+      res.on("data", (chunk) => {
+        responseData += chunk;
+      });
+      res.on("end", () => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            resolve(responseData ? JSON.parse(responseData) : {});
+          } catch {
+            resolve({ raw: responseData });
+          }
+        } else {
+          try {
+            const parsedErr = JSON.parse(responseData);
+            reject(new Error(parsedErr.message || `HTTP Status ${res.statusCode}`));
+          } catch {
+            reject(new Error(responseData || `HTTP Status ${res.statusCode}`));
+          }
+        }
+      });
+    });
+
+    req.on("error", (err) => {
+      reject(err);
+    });
+
+    if (body) {
+      req.write(JSON.stringify(body));
+    }
+    req.end();
+  });
+}
+
+app.post("/api/github/sync", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token, owner, repo, branch, commitMessage, files } = req.body;
+    if (!token || !owner || !repo || !files) {
+      res.status(400).json({ error: "Missing required parameters (token, owner, repo, files)" });
+      return;
+    }
+
+    const refBranch = (branch || "main").trim();
+    const message = (commitMessage || "chore: sync UniFi definitions to Terraform").trim();
+
+    // Step 1: Get the SHA of the latest commit on the branch
+    let headRef;
+    try {
+      headRef = await githubRequest(`/repos/${owner}/${repo}/git/ref/heads/${refBranch}`, "GET", token);
+    } catch (err: any) {
+      res.status(400).json({
+        error: `Could not reach branch '${refBranch}' in repository '${owner}/${repo}'. Please ensure the repo has been initialized with at least one commit (e.g. standard README) and your Personal Access Token (PAT) has 'repo' scopes permissions. Detail: ${err.message}`
+      });
+      return;
+    }
+
+    const latestCommitSha = headRef.object.sha;
+
+    // Step 2: Get the tree of the latest commit
+    const latestCommit = await githubRequest(`/repos/${owner}/${repo}/git/commits/${latestCommitSha}`, "GET", token);
+    const baseTreeSha = latestCommit.tree.sha;
+
+    // Step 3: Create a new tree with our multiple files
+    const treeItems = Object.entries(files).map(([filePath, content]) => ({
+      path: filePath,
+      mode: "100644",
+      type: "blob",
+      content: content as string
+    }));
+
+    const newTree = await githubRequest(`/repos/${owner}/${repo}/git/trees`, "POST", token, {
+      base_tree: baseTreeSha,
+      tree: treeItems
+    });
+
+    // Step 4: Create a new commit pointing to the new tree and parent commit
+    const newCommit = await githubRequest(`/repos/${owner}/${repo}/git/commits`, "POST", token, {
+      message: message,
+      tree: newTree.sha,
+      parents: [latestCommitSha]
+    });
+
+    // Step 5: Update the reference to point to the new commit
+    const updatedRef = await githubRequest(`/repos/${owner}/${repo}/git/refs/heads/${refBranch}`, "PATCH", token, {
+      sha: newCommit.sha,
+      force: false
+    });
+
+    res.json({
+      success: true,
+      commitSha: newCommit.sha,
+      commitUrl: `https://github.com/${owner}/${repo}/commit/${newCommit.sha}`,
+      ref: updatedRef.ref
+    });
+
+  } catch (error: any) {
+    console.error("GitHub Sync error:", error);
+    res.status(500).json({
+      error: error.message || "Failed to commit files to GitHub repository due to server connection issues."
+    });
+  }
+});
+
 // --- Server-Side Gemini Optimizer Endpoint ---
 
 app.post("/api/gemini/optimize", async (req: Request, res: Response): Promise<void> => {

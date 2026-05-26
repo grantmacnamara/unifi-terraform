@@ -181,10 +181,11 @@ export default function App() {
       options,
       activeNetworkIds,
       activeClientMacs,
-      activePortForwardIds
+      activePortForwardIds,
+      credentials.siteName
     );
     setTfFiles(generated);
-  }, [networks, clients, portForwards, options, activeNetworkIds, activeClientMacs, activePortForwardIds]);
+  }, [networks, clients, portForwards, options, activeNetworkIds, activeClientMacs, activePortForwardIds, credentials.siteName]);
 
   // Handle direct authentication proxy login
   const handleApiConnect = async () => {

@@ -13,6 +13,28 @@ export interface UnifiNetwork {
   upnp_enabled?: boolean;
   is_nat?: boolean;
   enabled?: boolean;
+
+  // Extra WAN / Internet properties
+  wan_networkgroup?: string;
+  wan_type?: string;
+  wan_username?: string;
+  x_wan_password?: string;
+  wan_dns?: string[];
+  wan_type_v6?: string;
+  wan_dhcp_v6_pd_size?: number;
+
+  // Extra DHCP / IPv6 properties
+  dhcp_enabled?: boolean;
+  dhcp_start?: string;
+  dhcp_stop?: string;
+  dhcp_v6_dns?: string[];
+  dhcp_v6_start?: string;
+  dhcp_v6_stop?: string;
+  ipv6_pd_interface?: string;
+  ipv6_pd_start?: string;
+  ipv6_pd_stop?: string;
+  ipv6_ra_priority?: string;
+  subnet?: string;
 }
 
 export interface UnifiClient {
@@ -26,6 +48,7 @@ export interface UnifiClient {
   oui?: string;
   ip?: string;
   user_group_id?: string;
+  note?: string;
 }
 
 export interface UnifiPortForward {
@@ -46,6 +69,7 @@ export interface TerraformFiles {
   "networks.tf": string;
   "clients.tf": string;
   "port_forwards.tf": string;
+  "imports.tf"?: string;
 }
 
 export interface MappingOptions {

@@ -122,7 +122,7 @@ cd your-unifi-terraform
 The generated provider code is structured to avoid storing credentials in cleartext. You can supply these secrets to Terraform using either of the following standard approaches on your local terminal:
 
 #### Approach A: Shell Environment Variables (Recommended)
-Set active variables directly in your CLI shell before running Terraform. The `paultyng/unifi` provider natively detects these:
+Set active variables directly in your CLI shell before running Terraform. The `filipowm/unifi` provider natively detects these:
 ```bash
 export UNIFI_USERNAME="your-unifi-username"
 export UNIFI_PASSWORD="your-secure-unifi-password"
@@ -146,18 +146,45 @@ unifi_allow_insecure = true
 ```
 
 ### 3. Initialize the Terraform Provider
-Prepare your project folder. This downloads the latest official **`paultyng/unifi`** provider binaries:
+Prepare your project folder. This downloads the latest official **`filipowm/unifi`** provider binaries:
 ```bash
 terraform init
 ```
 
-### 4. Run a Dry Run Audit (Optional)
+### 4. Adopt Existing Live Resources / Create State File (Avoiding Overwriting & Duplicates)
+Because your UniFi network is already active, running a standard `terraform apply` first would lead to creation conflicts (e.g., "resource already exists" or "IP address already taken").
+
+To bridge this seamlessly, the exporter compiles a custom **`imports.tf`** containing native Terraform 1.5+ `import` blocks. This allows Terraform to safely adopt your live configurations into its tracked database without duplicating or overwriting anything.
+
+#### Plan and Import (Terraform 1.5+):
+Run a plan query. Terraform reads `imports.tf`, queries your controller for the specific IDs, and prepares the adoption mapping:
+```bash
+terraform plan
+```
+Apply the mapping. This populates your local `terraform.tfstate` database with your existing networks, VLAN profiles, port forwarding configurations, and client leases:
+```bash
+terraform apply
+```
+*Once successful, Terraform of-record manages your assets. You are now safe to delete the temporary `imports.tf` file if you prefer.*
+
+#### Manual CLI Workaround (For Legacy Terraform versions < 1.5):
+If you are on an older Terraform version, register each existing asset manually into your local state using `terraform import`:
+```bash
+# Syntax: terraform import <resource_type>.<resource_name> <site_name>/<unique_id>
+
+# Examples:
+terraform import unifi_network.unifi_default default/634458c8637d13076f011e26
+terraform import unifi_user.client_n100 default/68:1d:ef:3a:fc:82
+terraform import unifi_port_forward.pf_http default/634470413e17cf0797560d1d
+```
+
+### 5. Run a Dry Run Audit (Optional)
 Check if your code structure matches the live environment state before doing any active writes:
 ```bash
 terraform plan
 ```
 
-### 5. Edit Your Configurations (Infrastructure-as-Code)
+### 6. Edit Your Configurations (Infrastructure-as-Code)
 Suppose you want to update your IoT subnet to enable multicast DNS (mDNS) or scale variable settings. Open the generated `networks.tf` code inside your visual editor and tweak the values:
 
 ```hcl
@@ -175,14 +202,14 @@ resource "unifi_network" "iot_network" {
 }
 ```
 
-### 6. Apply Code Changes to UniFi Controller
+### 7. Apply Code Changes to UniFi Controller
 Submit the new declarative rules directly. Terraform talks securely to your UDM or Cloud Key controller and runs API pushes behind the scenes:
 ```bash
 terraform apply
 ```
 *Review the layout plan, type `yes` to confirm, and the configuration change goes completely live instantly.*
 
-### 7. Commit and Version-Control Your Network
+### 8. Commit and Version-Control Your Network
 Now that the real physical device is fully synchronized with your layout code, commit your changes back to your GitHub repository to maintain absolute configuration history and safety:
 ```bash
 git add networks.tf
@@ -194,13 +221,14 @@ git push origin main
 
 ## 📐 Generated Terraform Structure
 
-The exporter outputs a fully-compliant set of HCL declaration structures compatible with the modern **`paultyng/unifi`** Terraform provider:
+The exporter outputs a fully-compliant set of HCL declaration structures compatible with the modern **`filipowm/unifi`** Terraform provider:
 
-- **`providers.tf`**: Sets provider options, declares version restrictions (`~> 0.41.0`), and provisions custom authentication links.
+- **`providers.tf`**: Sets provider options, declares version restrictions (`~> 1.0.0`), and provisions custom authentication links.
 - **`variables.tf`**: Consolidates environment specifics, subnets, usernames, and site identifiers.
 - **`networks.tf`**: Declares standard `unifi_network` boundaries, subnets, DHCP starts, DNS forwards, and multicast filters.
 - **`clients.tf`**: Provisions `unifi_user` resources with specific bindings for client hostnames and hardware MAC addresses.
 - **`port_forwards.tf`**: Configures custom `unifi_port_forward` entries mapping WAN-side ports to local node IP and service interfaces.
+- **`imports.tf`**: Custom adoptions layout implementing native Terraform `import` blocks to align state with physical controller configs.
 
 ---
 *Created professionally for SREs and Network Engineers. Manage your infrastructure with pride!*
